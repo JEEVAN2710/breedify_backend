@@ -5,9 +5,8 @@ from torchvision import models, transforms
 from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image
+from pathlib import Path
 import io
-import cv2
-import numpy as np
 
 # =======================================================
 # Config
@@ -38,7 +37,10 @@ model = models.efficientnet_v2_s(weights=None)
 in_features = model.classifier[1].in_features
 model.classifier[1] = nn.Linear(in_features, num_classes)
 
-state_dict = torch.load("best_cattle_model.pth", map_location=device)
+BASE_DIR = Path(__file__).resolve().parent
+MODEL_PATH = BASE_DIR / "best_cattle_model.pth"
+
+state_dict = torch.load(MODEL_PATH, map_location=device)
 model.load_state_dict(state_dict)
 model.to(device)
 model.eval()
@@ -57,36 +59,13 @@ app.add_middleware(
 )
 
 # =======================================================
-# Detection + Classification
+# Classification
 # =======================================================
-def detect_and_crop(image_bytes: bytes):
-    """Detect cow region using OpenCV (Haar Cascade) and crop."""
-    np_img = np.frombuffer(image_bytes, np.uint8)
-    img = cv2.imdecode(np_img, cv2.IMREAD_COLOR)
-
-    # Load pretrained cow detector (replace with YOLO/other model if needed)
-    cow_cascade = cv2.CascadeClassifier("haarcascade_cow.xml")  # <-- you need this XML file
-
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    cows = cow_cascade.detectMultiScale(gray, 1.1, 4)
-
-    if len(cows) == 0:
-        return None  # no cow detected
-
-    # Take the largest detected cow region
-    x, y, w, h = max(cows, key=lambda b: b[2] * b[3])
-    cropped = img[y:y+h, x:x+w]
-    cropped_pil = Image.fromarray(cv2.cvtColor(cropped, cv2.COLOR_BGR2RGB))
-    return cropped_pil
-
 
 def predict(image_bytes: bytes):
-    cropped_img = detect_and_crop(image_bytes)
+    image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
 
-    if cropped_img is None:
-        return {"label": "No cow detected", "confidence": 0.0}
-
-    img_t = transform(cropped_img).unsqueeze(0).to(device)
+    img_t = transform(image).unsqueeze(0).to(device)
 
     with torch.no_grad():
         outputs = model(img_t)
