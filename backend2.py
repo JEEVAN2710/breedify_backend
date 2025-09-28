@@ -78,6 +78,9 @@ def predict(image_bytes: bytes):
 
     return {"label": class_names[predicted_class.item()], "confidence": round(confidence, 3)}
 
+@app.get("/")
+def root():
+    return {"message": "Backend is running 🚀"}
 
 @app.post("/predict/")
 async def predict_api(file: UploadFile = File(...)):
